@@ -4,6 +4,8 @@ on:
   push:
     branches:
       - main
+    tags:
+      - "v*.*.*"
 
 permissions:
   contents: read
@@ -28,7 +30,7 @@ jobs:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-
+       
       - name: Extract Docker metadata
         id: meta
         uses: docker/metadata-action@v6
@@ -36,13 +38,14 @@ jobs:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
             type=sha,prefix=sha-
-            type=raw,value=latest
+            type=ref,event=tag
+            type=raw,value=latest,enable={{is_default_branch}}
           labels: |
             org.opencontainers.image.title=production-ready-cicd
             org.opencontainers.image.description=Production-ready CI/CD and DevSecOps demonstration
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
             org.opencontainers.image.revision=${{ github.sha }}
-
+            
       - name: Build and push Docker image
         uses: docker/build-push-action@v6
         with:
