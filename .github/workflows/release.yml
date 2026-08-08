@@ -14,15 +14,90 @@ permissions:
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
+  LOCAL_IMAGE: production-ready-cicd:${{ github.sha }}
 
 jobs:
-  publish:
-    name: Build and Publish Image
+  build-and-verify:
+    name: Build and Verify Release
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      - name: Build Docker image
+        run: |
+          docker build \
+            --tag "${LOCAL_IMAGE}" \
+            .
+
+      - name: Verify image exists
+        run: |
+          docker image inspect "${LOCAL_IMAGE}"
+
+      - name: Scan image for vulnerabilities
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: ${{ env.LOCAL_IMAGE }}
+          format: table
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: "1"
+
+      - name: Generate CycloneDX SBOM
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: ${{ env.LOCAL_IMAGE }}
+          format: cyclonedx
+          output: sbom.cdx.json
+          scan-type: image
+
+      - name: Validate SBOM
+        run: |
+          test -s sbom.cdx.json
+          jq -e '.bomFormat == "CycloneDX"' sbom.cdx.json
+          echo "SBOM components:"
+          jq '.components | length' sbom.cdx.json
+
+      - name: Save verified Docker image
+        run: |
+          docker save \
+            "${LOCAL_IMAGE}" \
+            --output production-ready-cicd.tar
+
+      - name: Upload verified image
+        uses: actions/upload-artifact@v7
+        with:
+          name: verified-container-image
+          path: production-ready-cicd.tar
+          retention-days: 1
+
+      - name: Upload SBOM
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-cyclonedx-sbom
+          path: sbom.cdx.json
+          retention-days: 30
+
+  publish:
+    name: Publish Verified Image
+    runs-on: ubuntu-latest
+    needs:
+      - build-and-verify
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download verified Docker image
+        uses: actions/download-artifact@v6
+        with:
+          name: verified-container-image
+
+      - name: Load verified Docker image
+        run: |
+          docker load \
+            --input production-ready-cicd.tar
 
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@v3
@@ -30,7 +105,7 @@ jobs:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-       
+
       - name: Extract Docker metadata
         id: meta
         uses: docker/metadata-action@v6
@@ -45,11 +120,35 @@ jobs:
             org.opencontainers.image.description=Production-ready CI/CD and DevSecOps demonstration
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
             org.opencontainers.image.revision=${{ github.sha }}
-            
-      - name: Build and push Docker image
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
+
+      - name: Tag verified image
+        env:
+          TAGS: ${{ steps.meta.outputs.tags }}
+        run: |
+          while IFS= read -r tag; do
+            [ -z "$tag" ] && continue
+
+            echo "Tagging ${LOCAL_IMAGE} as ${tag}"
+            docker tag "${LOCAL_IMAGE}" "${tag}"
+          done <<< "${TAGS}"
+
+      - name: Push verified image
+        env:
+          TAGS: ${{ steps.meta.outputs.tags }}
+        run: |
+          while IFS= read -r tag; do
+            [ -z "$tag" ] && continue
+
+            echo "Pushing ${tag}"
+            docker push "${tag}"
+          done <<< "${TAGS}"
+
+      - name: Show published image digest
+        env:
+          TAGS: ${{ steps.meta.outputs.tags }}
+        run: |
+          FIRST_TAG="$(echo "${TAGS}" | head -n1)"
+
+          docker inspect \
+            --format='{{index .RepoDigests 0}}' \
+            "${FIRST_TAG}"
