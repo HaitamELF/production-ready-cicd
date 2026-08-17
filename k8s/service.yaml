@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: production-ready-cicd
+spec:
+  selector:
+    app: production-ready-cicd
+
+  ports:
+    - port: 80
+      targetPort: 8000
+
+  type: ClusterIP
