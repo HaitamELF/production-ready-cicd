@@ -127,7 +127,7 @@ jobs:
 
     steps:
       - name: Download Docker image artifact
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@v8
         with:
           name: production-ready-cicd-image
 
@@ -154,7 +154,7 @@ jobs:
 
     steps:
       - name: Download Docker image artifact
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@v8
         with:
           name: production-ready-cicd-image
 
