@@ -4,19 +4,47 @@ metadata:
   name: production-ready-cicd
 spec:
   replicas: 2
+
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+
   selector:
     matchLabels:
       app: production-ready-cicd
+
   template:
     metadata:
       labels:
         app: production-ready-cicd
+
     spec:
+      securityContext:
+        runAsNonRoot: true
+
       containers:
         - name: app
-          image: ghcr.io/haitamelf/production-ready-cicd:latest
+          image: ghcr.io/haitamelf/production-ready-cicd:v0.1.0
+
           ports:
             - containerPort: 8000
+
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "256Mi"
 
           readinessProbe:
             httpGet:
@@ -24,10 +52,14 @@ spec:
               port: 8000
             initialDelaySeconds: 3
             periodSeconds: 5
+            timeoutSeconds: 2
+            failureThreshold: 3
 
           livenessProbe:
             httpGet:
               path: /health
               port: 8000
-            initialDelaySeconds: 5
+            initialDelaySeconds: 10
             periodSeconds: 10
+            timeoutSeconds: 2
+            failureThreshold: 3
