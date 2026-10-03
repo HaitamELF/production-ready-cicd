@@ -19,7 +19,7 @@ certifi==2026.7.22
     #   httpx
 click==8.4.2
     # via uvicorn
-fastapi==0.141.1
+fastapi==0.142.2
     # via -r requirements.in
 h11==0.16.0
     # via
@@ -37,6 +37,8 @@ idna==3.18
     #   httpx
 iniconfig==2.3.0
     # via pytest
+opentelemetry-api==1.45.0
+    # via fastapi
 packaging==26.3
     # via pytest
 pluggy==1.6.0
@@ -61,6 +63,7 @@ typing-extensions==4.16.0
     # via
     #   anyio
     #   fastapi
+    #   opentelemetry-api
     #   pydantic
     #   pydantic-core
     #   starlette
